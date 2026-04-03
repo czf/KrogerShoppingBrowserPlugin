@@ -1,0 +1,77 @@
+{
+  "manifest_version": 3,
+  "name": "Kroger Shopping Enhancer",
+  "version": "1.0.0",
+  "description": "Removes sponsored products, shows inventory & sale data, and enhances the coupon page on Kroger-family websites.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "*://*.kroger.com/*",
+    "*://*.fredmeyer.com/*",
+    "*://*.kingsoopers.com/*",
+    "*://*.ralphs.com/*",
+    "*://*.smithsfoodanddrug.com/*",
+    "*://*.frysfood.com/*",
+    "*://*.citymarket.com/*",
+    "*://*.dillons.com/*",
+    "*://*.marianos.com/*",
+    "*://*.picknsave.com/*",
+    "*://*.qfc.com/*",
+    "*://*.harristeeter.com/*",
+    "*://*.gerbes.com/*",
+    "*://*.bakers.com/*",
+    "*://*.jayc.com/*"
+  ],
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_title": "Kroger Shopping Enhancer"
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.kroger.com/*",
+        "*://*.fredmeyer.com/*",
+        "*://*.kingsoopers.com/*",
+        "*://*.ralphs.com/*",
+        "*://*.smithsfoodanddrug.com/*",
+        "*://*.frysfood.com/*",
+        "*://*.citymarket.com/*",
+        "*://*.dillons.com/*",
+        "*://*.marianos.com/*",
+        "*://*.picknsave.com/*",
+        "*://*.qfc.com/*",
+        "*://*.harristeeter.com/*",
+        "*://*.gerbes.com/*",
+        "*://*.bakers.com/*",
+        "*://*.jayc.com/*"
+      ],
+      "js": ["src/content/fetchInterceptor.ts"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://*.kroger.com/*",
+        "*://*.fredmeyer.com/*",
+        "*://*.kingsoopers.com/*",
+        "*://*.ralphs.com/*",
+        "*://*.smithsfoodanddrug.com/*",
+        "*://*.frysfood.com/*",
+        "*://*.citymarket.com/*",
+        "*://*.dillons.com/*",
+        "*://*.marianos.com/*",
+        "*://*.picknsave.com/*",
+        "*://*.qfc.com/*",
+        "*://*.harristeeter.com/*",
+        "*://*.gerbes.com/*",
+        "*://*.bakers.com/*",
+        "*://*.jayc.com/*"
+      ],
+      "js": ["src/content/index.tsx"],
+      "run_at": "document_idle"
+    }
+  ]
+}
