@@ -690,6 +690,7 @@ export function CouponCustomPage() {
   const [excludedBrands, setExcludedBrands] = useState<string[]>([]);
   const [brandInputValue, setBrandInputValue] = useState('');
   const [activeStatuses, setActiveStatuses] = useState<string[]>(['unclipped']);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const initialized = useRef(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -888,6 +889,14 @@ export function CouponCustomPage() {
     const onScroll = () => checkAndLoadMoreRef.current?.();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Show/hide scroll-to-top button when scrolled down
+  useEffect(() => {
+    const onShow = () => setShowScrollTop(window.scrollY > 200);
+    onShow();
+    window.addEventListener('scroll', onShow, { passive: true });
+    return () => window.removeEventListener('scroll', onShow);
   }, []);
 
   async function handleClip(id: string) {
@@ -1300,6 +1309,23 @@ export function CouponCustomPage() {
           </>
         )}
       </div>
+      {/* Scroll-to-top button */}
+      {showScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          title="Scroll to top"
+          aria-label="Scroll to top"
+          style={{
+            position: 'fixed', right: 20, bottom: 24, zIndex: 9000,
+            width: 44, height: 44, borderRadius: 22, border: 'none',
+            backgroundColor: 'var(--kext-blue)', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.2)', cursor: 'pointer'
+          }}
+        >
+          <span style={{ fontSize: 20, lineHeight: 1 }}>↑</span>
+        </button>
+      )}
       {modalCouponId && (() => {
         const coupon = coupons.find(c => c.id === modalCouponId);
         if (!coupon) return null;
