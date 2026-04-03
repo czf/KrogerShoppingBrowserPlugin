@@ -689,6 +689,7 @@ export function CouponCustomPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<Record<string, boolean>>({});
   const [excludedBrands, setExcludedBrands] = useState<string[]>([]);
   const [brandInputValue, setBrandInputValue] = useState('');
+  const [activeStatuses, setActiveStatuses] = useState<string[]>(['unclipped']);
   const initialized = useRef(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -704,7 +705,7 @@ export function CouponCustomPage() {
     };
   }, []);
 
-  async function loadCoupons(cats: string[], sort: string, newOnly: boolean, off: number, append = false, searchString?: string) {
+  async function loadCoupons(cats: string[], sort: string, newOnly: boolean, off: number, append = false, searchString?: string, statuses?: string[]) {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
     if (append) {
@@ -715,7 +716,7 @@ export function CouponCustomPage() {
       setLoadError(false);
     }
     try {
-      const result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString });
+      const result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses });
       let couponsPage = result.coupons;
       if (newOnly && couponsPage.length > 0) {
         couponsPage = filterCoupons(couponsPage, { newOnly: true });
@@ -774,7 +775,7 @@ export function CouponCustomPage() {
       setSortBy(sort);
       setExcludedBrands(excluded);
       initialized.current = true;
-      loadCoupons(cats, sort, newOnly, 0, false, searchText);
+      loadCoupons(cats, sort, newOnly, 0, false, searchText, activeStatuses);
     });
     return () => { cancelled = true; };
   }, []);
@@ -789,7 +790,7 @@ export function CouponCustomPage() {
     setActiveCategories(newCats);
     persistFilters(newCats, activeModalities, activeSpecialSavings, onlyNewCoupons, sortBy);
     setOffset(0);
-    loadCoupons(newCats, sortBy, onlyNewCoupons, 0, false, searchText);
+    loadCoupons(newCats, sortBy, onlyNewCoupons, 0, false, searchText, activeStatuses);
   }
 
   useLayoutEffect(() => {
@@ -815,6 +816,16 @@ export function CouponCustomPage() {
     persistFilters(activeCategories, activeModalities, newSpecials, onlyNewCoupons, sortBy);
   }
 
+  function handleStatusToggle(value: string) {
+    const newStatuses = activeStatuses.includes(value)
+      ? activeStatuses.filter(s => s !== value)
+      : [...activeStatuses, value];
+    setActiveStatuses(newStatuses);
+    // trigger reload with new statuses
+    setOffset(0);
+    loadCoupons(activeCategories, sortBy, onlyNewCoupons, 0, false, searchText, newStatuses);
+  }
+
   function handleOnlyNewCouponsToggle() {
     const newVal = !onlyNewCoupons;
     setOnlyNewCoupons(newVal);
@@ -822,14 +833,14 @@ export function CouponCustomPage() {
     if (newVal) setSortBy('recent');
     persistFilters(activeCategories, activeModalities, activeSpecialSavings, newVal, newSort);
     setOffset(0);
-    loadCoupons(activeCategories, newSort, newVal, 0, false, searchText);
+    loadCoupons(activeCategories, newSort, newVal, 0, false, searchText, activeStatuses);
   }
 
   function handleSortChange(sort: string) {
     setSortBy(sort);
     persistFilters(activeCategories, activeModalities, activeSpecialSavings, onlyNewCoupons, sort);
     setOffset(0);
-    loadCoupons(activeCategories, sort, onlyNewCoupons, 0, false, searchText);
+    loadCoupons(activeCategories, sort, onlyNewCoupons, 0, false, searchText, activeStatuses);
   }
 
   function handleSearchChange(text: string) {
@@ -837,7 +848,7 @@ export function CouponCustomPage() {
     searchTimer.current = setTimeout(() => {
       setSearchText(text);
       setOffset(0);
-      loadCoupons(activeCategories, sortBy, onlyNewCoupons, 0, false, text);
+      loadCoupons(activeCategories, sortBy, onlyNewCoupons, 0, false, text, activeStatuses);
     }, 300);
   }
 
@@ -850,9 +861,10 @@ export function CouponCustomPage() {
     setSearchText('');
     setExcludedBrands([]);
     setBrandInputValue('');
+    setActiveStatuses(['unclipped']);
     setCouponFilters([]);
     setOffset(0);
-    loadCoupons([], 'relevance', false, 0, false, '');
+    loadCoupons([], 'relevance', false, 0, false, '', ['unclipped']);
   }
 
   // Keep checkAndLoadMoreRef always pointing to the latest load-next-page logic
@@ -865,7 +877,7 @@ export function CouponCustomPage() {
       if (rect.top < window.innerHeight + 200 && rect.bottom >= 0) {
         const nextOffset = offset + PAGE_SIZE;
         setOffset(nextOffset);
-        loadCoupons(activeCategories, sortBy, onlyNewCoupons, nextOffset, true);
+        loadCoupons(activeCategories, sortBy, onlyNewCoupons, nextOffset, true, undefined, activeStatuses);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1009,6 +1021,39 @@ export function CouponCustomPage() {
             }}>{newCouponsCount}</span>
           )}
         </label>
+
+        {/* Status filters */}
+        <div style={{ marginTop: 8, marginBottom: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#333', marginBottom: 6 }}>Status</div>
+          <label className="kext-sidebar-label">
+            <input
+              type="checkbox"
+              checked={activeStatuses.includes('unclipped')}
+              onChange={() => handleStatusToggle('unclipped')}
+              style={{ cursor: 'pointer', accentColor: '#0066cc', flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 13, color: '#333' }}>Unclipped</span>
+          </label>
+          <label className="kext-sidebar-label">
+            <input
+              type="checkbox"
+              checked={activeStatuses.includes('active')}
+              onChange={() => handleStatusToggle('active')}
+              style={{ cursor: 'pointer', accentColor: '#0066cc', flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 13, color: '#333' }}>Active</span>
+          </label>
+          <label className="kext-sidebar-label">
+            <input
+              type="checkbox"
+              checked={activeStatuses.includes('redeemed')}
+              onChange={() => handleStatusToggle('redeemed')}
+              style={{ cursor: 'pointer', accentColor: '#0066cc', flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 13, color: '#333' }}>Redeemed</span>
+          </label>
+        </div>
+
         <hr style={{ margin: '6px 0 2px', border: 'none', borderTop: '1px solid #e2e8f0' }} />
 
         {/* Exclude Brands */}
@@ -1240,7 +1285,7 @@ export function CouponCustomPage() {
                     setLoadError(false);
                     const nextOffset = offset + PAGE_SIZE;
                     setOffset(nextOffset);
-                    loadCoupons(activeCategories, sortBy, onlyNewCoupons, nextOffset, true, searchText);
+                    loadCoupons(activeCategories, sortBy, onlyNewCoupons, nextOffset, true, searchText, activeStatuses);
                   }}
                   style={{
                     padding: '6px 20px', backgroundColor: 'var(--kext-blue)', color: '#fff',

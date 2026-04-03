@@ -1,6 +1,6 @@
-import React from 'react';
+
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock couponApi before importing the component so imports resolve to mocks
 vi.mock('../../../utils/couponApi', () => ({
@@ -152,7 +152,7 @@ describe('CouponCustomPage — integration', () => {
     const sentinel = Array.from(container.querySelectorAll('div')).find(el => (el as HTMLElement).style.height === '48px' || (el as HTMLElement).style.height === '48') as HTMLElement;
 
     // Ensure sentinel reports being in the viewport
-    sentinel.getBoundingClientRect = () => ({ top: window.innerHeight - 10, bottom: window.innerHeight + 10, left: 0, right: 0, height: 48, width: 0 });
+    sentinel.getBoundingClientRect = () => new DOMRect(0, window.innerHeight - 10, 0, 48);
 
     window.dispatchEvent(new Event('scroll'));
 

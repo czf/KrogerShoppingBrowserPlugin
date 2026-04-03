@@ -44,17 +44,22 @@ export async function fetchCoupons({
   offset = 0,
   pageSize = 24,
   searchString,
+  statuses,
 }: {
   categories?: string[];
   offset?: number;
   pageSize?: number;
   searchString?: string;
+  statuses?: string[];
 } = {}): Promise<FetchCouponsResult> {
   const params = new URLSearchParams();
   params.append('projections', 'coupons.compact');
-  // Both filter.status values must be adjacent or the API returns 400
-  params.append('filter.status', 'unclipped');
-  params.append('filter.status', 'active');
+  // filter.status can be provided multiple times; default to 'unclipped' if none specified
+  if (statuses && statuses.length > 0) {
+    for (const s of statuses) params.append('filter.status', s);
+  } else {
+    params.append('filter.status', 'unclipped');
+  }
   params.append('page.size', String(pageSize));
   params.append('page.offset', String(offset));
   // filter.sort and filter.onlyNewCoupons cause 400; omit both and handle client-side
@@ -108,8 +113,11 @@ export async function fetchCoupons({
     if (res.status === 500 && categories.length > 0) {
       const fallbackParams = new URLSearchParams();
       fallbackParams.append('projections', 'coupons.compact');
-      fallbackParams.append('filter.status', 'unclipped');
-      fallbackParams.append('filter.status', 'active');
+      if (statuses && statuses.length > 0) {
+        for (const s of statuses) fallbackParams.append('filter.status', s);
+      } else {
+        fallbackParams.append('filter.status', 'unclipped');
+      }
       fallbackParams.append('page.size', String(pageSize));
       fallbackParams.append('page.offset', String(offset));
       if (searchString) {
