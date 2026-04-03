@@ -51,6 +51,10 @@ export default function App() {
       <div style={{ marginTop: 10, fontSize: 11, color: '#cbd5e1', textAlign: 'center' }}>
         Changes take effect on next page load
       </div>
+
+      <div style={{ marginTop: 12, fontSize: 12, color: '#64748b', textAlign: 'center' }}>
+        <a href="https://github.com/czf/KrogerShoppingBrowserPlugin/" target="_blank" rel="noreferrer" style={{ color: '#0369a1', textDecoration: 'none' }}>GitHub Repository</a>
+      </div>
     </div>
   );
 }
