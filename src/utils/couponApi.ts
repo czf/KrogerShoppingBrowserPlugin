@@ -45,12 +45,14 @@ export async function fetchCoupons({
   pageSize = 24,
   searchString,
   statuses,
+  modalities = [],
 }: {
   categories?: string[];
   offset?: number;
   pageSize?: number;
   searchString?: string;
   statuses?: string[];
+  modalities?: string[];
 } = {}): Promise<FetchCouponsResult> {
   const params = new URLSearchParams();
   params.append('projections', 'coupons.compact');
@@ -65,6 +67,9 @@ export async function fetchCoupons({
   // filter.sort and filter.onlyNewCoupons cause 400; omit both and handle client-side
   for (const cat of categories) {
     params.append('filter.category', cat);
+  }
+  for (const m of modalities) {
+    params.append('filter.modality', m);
   }
   if (searchString) {
     params.append('filter.searchString', searchString);
@@ -110,13 +115,17 @@ export async function fetchCoupons({
       res = await doFetch(params);
     }
     // Retry without category filters on 500 (invalid/unavailable category for this store)
-    if (res.status === 500 && categories.length > 0) {
+    if (res.status === 500 && (categories.length > 0 || modalities.length > 0)) {
       const fallbackParams = new URLSearchParams();
       fallbackParams.append('projections', 'coupons.compact');
       if (statuses && statuses.length > 0) {
         for (const s of statuses) fallbackParams.append('filter.status', s);
       } else {
         fallbackParams.append('filter.status', 'unclipped');
+      }
+      // Preserve modality filters even when omitting categories on fallback
+      if (modalities && modalities.length > 0) {
+        for (const m of modalities) fallbackParams.append('filter.modality', m);
       }
       fallbackParams.append('page.size', String(pageSize));
       fallbackParams.append('page.offset', String(offset));
