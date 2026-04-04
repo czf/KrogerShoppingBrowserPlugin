@@ -706,7 +706,7 @@ export function CouponCustomPage() {
     };
   }, []);
 
-  async function loadCoupons(cats: string[], sort: string, newOnly: boolean, off: number, append = false, searchString?: string, statuses?: string[]) {
+  async function loadCoupons(cats: string[], sort: string, newOnly: boolean, off: number, append = false, searchString?: string, statuses?: string[], modalities?: string[]) {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
     if (append) {
@@ -717,7 +717,7 @@ export function CouponCustomPage() {
       setLoadError(false);
     }
     try {
-      const result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses });
+      const result = await couponApi.fetchCoupons({ categories: cats, modalities: modalities ?? activeModalities, offset: off, pageSize: PAGE_SIZE, searchString, statuses });
       let couponsPage = result.coupons;
       if (newOnly && couponsPage.length > 0) {
         couponsPage = filterCoupons(couponsPage, { newOnly: true });
@@ -776,7 +776,7 @@ export function CouponCustomPage() {
       setSortBy(sort);
       setExcludedBrands(excluded);
       initialized.current = true;
-      loadCoupons(cats, sort, newOnly, 0, false, searchText, activeStatuses);
+      loadCoupons(cats, sort, newOnly, 0, false, searchText, activeStatuses, mods);
     });
     return () => { cancelled = true; };
   }, []);
@@ -807,6 +807,8 @@ export function CouponCustomPage() {
       : [...activeModalities, value];
     setActiveModalities(newMods);
     persistFilters(activeCategories, newMods, activeSpecialSavings, onlyNewCoupons, sortBy);
+    setOffset(0);
+    loadCoupons(activeCategories, sortBy, onlyNewCoupons, 0, false, searchText, activeStatuses, newMods);
   }
 
   function handleSpecialSavingsToggle(value: string) {
