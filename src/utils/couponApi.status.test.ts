@@ -1,5 +1,8 @@
 import { it, expect, vi, beforeEach, afterEach } from 'vitest';
+vi.mock('./inPageFetch', () => ({ inPageFetch: vi.fn() }));
 import { fetchCoupons } from './couponApi';
+import { inPageFetch } from './inPageFetch';
+const fetch = inPageFetch as unknown as typeof globalThis.fetch;
 
 // Stub buildLafHeaders so it doesn't need a real browser session
 vi.mock('./laf', () => ({
@@ -17,7 +20,9 @@ function makeResponse(body: unknown, status = 200) {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.stubGlobal('fetch', vi.fn());
+  // Clear mocks between tests so call counts don't accumulate across cases
+  vi.clearAllMocks();
+  // inPageFetch module is mocked above; individual tests set its return values as needed
 });
 
 afterEach(() => {

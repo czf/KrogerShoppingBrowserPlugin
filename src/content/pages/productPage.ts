@@ -5,6 +5,7 @@ import type { KrogerProductsResponse } from '../../utils/api';
 import { waitForElement } from '../../utils/dom';
 import { ProductEnhancementPanel } from '../components/ProductEnhancementPanel';
 import { buildLafHeaders } from '../../utils/laf';
+import { inPageFetch } from '../../utils/inPageFetch';
 
 let panelRoot: Root | null = null;
 let panelContainer: HTMLElement | null = null;
@@ -22,7 +23,8 @@ async function fetchProductData(upc: string): Promise<KrogerProductsResponse | n
   });
 
   try {
-    const doFetch = async () => fetch(`/atlas/v1/product/v2/products?${params}`, {
+    const doFetch = async () => inPageFetch(`/atlas/v1/product/v2/products?${params}`, {
+      method: 'GET',
       headers: await buildLafHeaders(),
       credentials: 'include',
     });

@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { getCouponFilters, setCouponFilters } from '../../../utils/storage';
 import * as couponApi from '../../../utils/couponApi';
 import type { KrogerCoupon, KrogerProductCompact } from '../../../utils/couponApi';
-import { formatExpiry, filterCoupons, sortCoupons, parseStoredFilters, buildStoredFilters } from '../../../utils/couponUtils';
+import { formatExpiry, parseStoredFilters, buildStoredFilters } from '../../../utils/couponUtils';
 
 const PAGE_SIZE = 24;
 
@@ -118,6 +118,28 @@ const SCOPED_CSS = `
   display: flex;
   align-items: center;
   gap: 8px;
+}
+#kroger-ext-coupon-custom-page .kext-coupon-count {
+  position: relative;
+  display: inline-block;
+}
+#kroger-ext-coupon-custom-page .kext-excluded-popover {
+  display: none;
+}
+#kroger-ext-coupon-custom-page .kext-coupon-count:hover .kext-excluded-popover {
+  display: block;
+}
+#kroger-ext-coupon-custom-page .kext-excluded-popover {
+  min-width: 220px;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.12);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #111;
+  z-index: 9999;
+}
   padding: 4px 6px;
   cursor: pointer;
   border-radius: 5px;
@@ -323,11 +345,13 @@ function CouponCard({ coupon, clipping, onClip, onViewDetails }: CouponCardProps
           overflow: 'hidden', position: 'relative', cursor: 'pointer',
         }}
       >
-        <img
-          src={coupon.imageUrl}
-          alt={coupon.shortDescription}
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-        />
+        {coupon.imageUrl ? (
+          <img
+            src={coupon.imageUrl}
+            alt={coupon.shortDescription}
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          />
+        ) : null}
         {specialSavings.length > 0 && (
           <div style={{
             position: 'absolute', top: 6, right: 6,
@@ -523,14 +547,16 @@ function CouponDetailModal({ coupon, clipping, onClip, onClose, products, loadin
         </div>
         <div style={{ padding: 24 }}>
           <div style={{ display: 'flex', flexDirection: 'row', gap: 20, marginBottom: 20 }}>
-            <img
-              src={coupon.imageUrl}
-              alt={coupon.shortDescription}
-              style={{
-                width: 120, height: 120, objectFit: 'contain', flexShrink: 0,
-                borderRadius: 8, border: '1px solid #eee', backgroundColor: '#f5f7fa',
-              }}
-            />
+            {coupon.imageUrl ? (
+              <img
+                src={coupon.imageUrl}
+                alt={coupon.shortDescription}
+                style={{
+                  width: 120, height: 120, objectFit: 'contain', flexShrink: 0,
+                  borderRadius: 8, border: '1px solid #eee', backgroundColor: '#f5f7fa',
+                }}
+              />
+            ) : null}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
               <span style={{ fontSize: 20, fontWeight: 700, color: '#0066cc' }}>
                 {titleText}
@@ -693,6 +719,9 @@ export function CouponCustomPage() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const initialized = useRef(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [specialSavingsNameMap, setSpecialSavingsNameMap] = useState<Record<string, string>>({});
+  const [availableSpecialSavingsOptions, setAvailableSpecialSavingsOptions] = useState<{ name: string; displayName: string }[]>([]);
+  const unmappedSpecialsRef = useRef<Set<string>>(new Set());
 
   // Inject scoped CSS once
   useEffect(() => {
@@ -706,7 +735,7 @@ export function CouponCustomPage() {
     };
   }, []);
 
-  async function loadCoupons(cats: string[], sort: string, newOnly: boolean, off: number, append = false, searchString?: string, statuses?: string[]) {
+  async function loadCoupons(cats: string[], sort: string, newOnly: boolean, off: number, append = false, searchString?: string, statuses?: string[], modalities?: string[], specialSavings?: string[]) {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
     if (append) {
@@ -717,18 +746,63 @@ export function CouponCustomPage() {
       setLoadError(false);
     }
     try {
-      const result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses });
-      let couponsPage = result.coupons;
-      if (newOnly && couponsPage.length > 0) {
-        couponsPage = filterCoupons(couponsPage, { newOnly: true });
-      }
-      couponsPage = sortCoupons(couponsPage, sort);
-      if (append) {
-        setCoupons(prev => [...prev, ...couponsPage]);
+      const modalitiesParam = modalities ?? activeModalities;
+      const specialSavingsParam = specialSavings ?? activeSpecialSavings;
+      // Determine which specials need mapping and which we've already determined are unmapped
+      const toMap = specialSavingsParam.filter(s => !specialSavingsNameMap[s] && !unmappedSpecialsRef.current.has(s));
+      let result = null as unknown as ReturnType<typeof couponApi.fetchCoupons> extends Promise<infer R> ? R : any;
+
+      if (toMap.length > 0) {
+        // initial fetch without specialSavings to obtain mapping in meta
+        result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses, sort, onlyNew: newOnly, modalities: modalitiesParam, specialSavings: [] });
+        try { console.debug('[CouponCustomPage] loadCoupons (prefetch) result', { offset: off, append, resultLen: result.coupons.length, hasMore: result.hasMore, totalCount: result.totalCount }); } catch {}
+        // populate mapping from meta.specialSavingsOptions
+        let map = { ...specialSavingsNameMap };
+        try {
+          for (const opt of result.specialSavingsOptions ?? []) {
+            if (opt.displayName && opt.name && !map[opt.displayName]) map[opt.displayName] = opt.name;
+          }
+          setSpecialSavingsNameMap(map);
+        } catch (e) {}
+        // remap specials now using the freshly populated local map
+        const mappedNow = specialSavingsParam.map(s => map[s] ?? null).filter(Boolean) as string[];
+        // mark unmapped items to avoid repeat prefetches
+        for (const s of specialSavingsParam) {
+          if (!map[s]) unmappedSpecialsRef.current.add(s);
+        }
+        if (mappedNow.length > 0) {
+          result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses, sort, onlyNew: newOnly, modalities: modalitiesParam, specialSavings: mappedNow });
+        }
       } else {
+        // Either all are mapped already or we've seen they are unmapped; use existing mappings only
+        const sendSpecials = specialSavingsParam.map(s => specialSavingsNameMap[s]).filter(Boolean) as string[];
+        result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses, sort, onlyNew: newOnly, modalities: modalitiesParam, specialSavings: sendSpecials });
+      }
+
+      try { console.debug('[CouponCustomPage] loadCoupons result', { offset: off, append, resultLen: result.coupons.length, hasMore: result.hasMore, totalCount: result.totalCount }); } catch {}
+      let couponsPage = result.coupons;
+
+      // Populate specialSavingsNameMap from meta.specialSavingsOptions when available
+      try {
+        const map = { ...specialSavingsNameMap };
+        for (const opt of result.specialSavingsOptions ?? []) {
+          if (opt.displayName && opt.name && !map[opt.displayName]) map[opt.displayName] = opt.name;
+        }
+        setSpecialSavingsNameMap(map);
+      } catch (e) {}
+
+
+      if (append) {
+        setCoupons(prev => {
+          try { console.debug('[CouponCustomPage] appending coupons', { prevLen: prev.length, newLen: couponsPage.length }); } catch {}
+          return [...prev, ...couponsPage];
+        });
+      } else {
+        try { console.debug('[CouponCustomPage] setting coupons', { newLen: couponsPage.length }); } catch {}
         setCoupons(couponsPage);
       }
-      setHasMore(result.hasMore && !newOnly);
+      // Respect server-provided pagination flag; do not disable pagination for client-side filters
+      setHasMore(result.hasMore);
       if (!append) {
         setTotalCount(result.totalCount);
         setNewCouponsCount(result.newCouponsCount);
@@ -745,6 +819,19 @@ export function CouponCustomPage() {
             const validValues = new Set(dynCats.map(c => c.value));
             setActiveCategories(prev => prev.filter(c => validValues.has(c)));
           }
+        }
+
+        // Update available special savings options from meta (only on non-append fresh loads)
+        if (!append && result.specialSavingsOptions && result.specialSavingsOptions.length > 0) {
+          setAvailableSpecialSavingsOptions(result.specialSavingsOptions.map(o => ({ displayName: o.displayName, name: o.name })));
+          // populate name map too
+          try {
+            const map = { ...specialSavingsNameMap };
+            for (const opt of result.specialSavingsOptions) {
+              if (opt.displayName && opt.name && !map[opt.displayName]) map[opt.displayName] = opt.name;
+            }
+            setSpecialSavingsNameMap(map);
+          } catch (e) {}
         }
       }
     } catch {
@@ -776,7 +863,8 @@ export function CouponCustomPage() {
       setSortBy(sort);
       setExcludedBrands(excluded);
       initialized.current = true;
-      loadCoupons(cats, sort, newOnly, 0, false, searchText, activeStatuses);
+      // pass parsed modalities/specials explicitly to avoid relying on state being updated synchronously
+      loadCoupons(cats, sort, newOnly, 0, false, searchText, activeStatuses, mods, specials);
     });
     return () => { cancelled = true; };
   }, []);
@@ -791,7 +879,7 @@ export function CouponCustomPage() {
     setActiveCategories(newCats);
     persistFilters(newCats, activeModalities, activeSpecialSavings, onlyNewCoupons, sortBy);
     setOffset(0);
-    loadCoupons(newCats, sortBy, onlyNewCoupons, 0, false, searchText, activeStatuses);
+    loadCoupons(newCats, sortBy, onlyNewCoupons, 0, false, searchText, activeStatuses, activeModalities, activeSpecialSavings);
   }
 
   useLayoutEffect(() => {
@@ -805,16 +893,29 @@ export function CouponCustomPage() {
     const newMods = activeModalities.includes(value)
       ? activeModalities.filter(m => m !== value)
       : [...activeModalities, value];
+    console.debug('[CouponCustomPage] modality toggle', { value, newMods });
     setActiveModalities(newMods);
     persistFilters(activeCategories, newMods, activeSpecialSavings, onlyNewCoupons, sortBy);
+    // Treat modality as a server-side filter: reload from server
+    setOffset(0);
+    loadCoupons(activeCategories, sortBy, onlyNewCoupons, 0, false, searchText, activeStatuses, newMods, activeSpecialSavings);
   }
 
-  function handleSpecialSavingsToggle(value: string) {
+  async function handleSpecialSavingsToggle(value: string) {
     const newSpecials = activeSpecialSavings.includes(value)
       ? activeSpecialSavings.filter(s => s !== value)
       : [...activeSpecialSavings, value];
     setActiveSpecialSavings(newSpecials);
     persistFilters(activeCategories, activeModalities, newSpecials, onlyNewCoupons, sortBy);
+    // If we don't yet have mapping for any of the newly selected specials, fetch a page without specialSavings to populate the map, then re-apply
+    const unmapped = newSpecials.filter(s => !specialSavingsNameMap[s]);
+    setOffset(0);
+    if (unmapped.length > 0) {
+      // fetch to populate specialSavingsNameMap (will not apply the specials)
+      await loadCoupons(activeCategories, sortBy, onlyNewCoupons, 0, false, searchText, activeStatuses, activeModalities, []);
+    }
+    // Now apply the requested specials (loadCoupons maps displayName -> internal name)
+    loadCoupons(activeCategories, sortBy, onlyNewCoupons, 0, false, searchText, activeStatuses, activeModalities, newSpecials);
   }
 
   function handleStatusToggle(value: string) {
@@ -824,7 +925,7 @@ export function CouponCustomPage() {
     setActiveStatuses(newStatuses);
     // trigger reload with new statuses
     setOffset(0);
-    loadCoupons(activeCategories, sortBy, onlyNewCoupons, 0, false, searchText, newStatuses);
+    loadCoupons(activeCategories, sortBy, onlyNewCoupons, 0, false, searchText, newStatuses, activeModalities, activeSpecialSavings);
   }
 
   function handleOnlyNewCouponsToggle() {
@@ -834,14 +935,14 @@ export function CouponCustomPage() {
     if (newVal) setSortBy('recent');
     persistFilters(activeCategories, activeModalities, activeSpecialSavings, newVal, newSort);
     setOffset(0);
-    loadCoupons(activeCategories, newSort, newVal, 0, false, searchText, activeStatuses);
+    loadCoupons(activeCategories, newSort, newVal, 0, false, searchText, activeStatuses, activeModalities, activeSpecialSavings);
   }
 
   function handleSortChange(sort: string) {
     setSortBy(sort);
     persistFilters(activeCategories, activeModalities, activeSpecialSavings, onlyNewCoupons, sort);
     setOffset(0);
-    loadCoupons(activeCategories, sort, onlyNewCoupons, 0, false, searchText, activeStatuses);
+    loadCoupons(activeCategories, sort, onlyNewCoupons, 0, false, searchText, activeStatuses, activeModalities, activeSpecialSavings);
   }
 
   function handleSearchChange(text: string) {
@@ -865,7 +966,7 @@ export function CouponCustomPage() {
     setActiveStatuses(['unclipped']);
     setCouponFilters([]);
     setOffset(0);
-    loadCoupons([], 'relevance', false, 0, false, '', ['unclipped']);
+    loadCoupons([], 'relevance', false, 0, false, '', ['unclipped'], [], []);
   }
 
   // Keep checkAndLoadMoreRef always pointing to the latest load-next-page logic
@@ -878,7 +979,7 @@ export function CouponCustomPage() {
       if (rect.top < window.innerHeight + 200 && rect.bottom >= 0) {
         const nextOffset = offset + PAGE_SIZE;
         setOffset(nextOffset);
-        loadCoupons(activeCategories, sortBy, onlyNewCoupons, nextOffset, true, undefined, activeStatuses);
+        loadCoupons(activeCategories, sortBy, onlyNewCoupons, nextOffset, true, undefined, activeStatuses, activeModalities, activeSpecialSavings);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -951,12 +1052,22 @@ export function CouponCustomPage() {
     persistFilters(activeCategories, activeModalities, activeSpecialSavings, onlyNewCoupons, sortBy, newExcluded);
   }
 
-  const displayedCoupons = useMemo(() => filterCoupons(coupons, {
-    modalities: activeModalities,
-    specialSavings: activeSpecialSavings,
-    excludedBrands,
-    newOnly: onlyNewCoupons,
-  }), [coupons, activeModalities, activeSpecialSavings, excludedBrands, onlyNewCoupons]);
+  const displayedCoupons = useMemo(() => {
+    if (!excludedBrands || excludedBrands.length === 0) return coupons;
+    const excluded = excludedBrands.map(b => b.toLowerCase());
+    return coupons.filter(c => {
+      const brand = ((c.brandName || c.brand) || '').toLowerCase();
+      return !excluded.some(ex => brand.includes(ex));
+    });
+  }, [coupons, excludedBrands]);
+
+  // Number of coupons currently hidden by client-side excluded-brand filtering from fetched pages
+  const excludedCount = Math.max(0, coupons.length - displayedCoupons.length);
+
+  useEffect(() => {
+    try { console.debug('[CouponCustomPage] state sizes', { couponsLen: coupons.length, displayedLen: displayedCoupons.length, excludedCount, hasMore, offset }); } catch {}
+  }, [coupons, displayedCoupons, excludedCount, hasMore, offset]);
+
 
   const hasAnyFilter = activeCategories.length > 0 || activeModalities.length > 0 ||
     activeSpecialSavings.length > 0 || onlyNewCoupons || sortBy !== 'relevance' || excludedBrands.length > 0;
@@ -1131,6 +1242,7 @@ export function CouponCustomPage() {
             {MODALITY_OPTIONS.map(m => (
               <button
                 key={m.value}
+                type="button"
                 className={`kext-pill-toggle${activeModalities.includes(m.value) ? ' kext-pill-toggle--active' : ''}`}
                 onClick={() => handleModalityToggle(m.value)}
                 title={m.label}
@@ -1149,11 +1261,40 @@ export function CouponCustomPage() {
           badgeCount={activeSpecialSavings.length}
         >
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingBottom: 4 }}>
-            {SPECIAL_SAVINGS_OPTIONS.map(s => (
+            {availableSpecialSavingsOptions.length > 0 ? (
+              availableSpecialSavingsOptions.map(o => (
+                <button
+                  key={o.displayName}
+                  type="button"
+                  className={`kext-special-pill${activeSpecialSavings.includes(o.displayName) ? ' kext-special-pill--active' : ''}`}
+                  onClick={() => handleSpecialSavingsToggle(o.displayName)}
+                >
+                  {o.displayName}
+                </button>
+              ))
+            ) : (
+              // Fallback to hardcoded list only if we haven't received meta yet
+              SPECIAL_SAVINGS_OPTIONS.map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`kext-special-pill${activeSpecialSavings.includes(s) ? ' kext-special-pill--active' : ''}`}
+                  onClick={() => handleSpecialSavingsToggle(s)}
+                >
+                  {s}
+                </button>
+              ))
+            )}
+
+            {/* Render any preselected specialSavings that aren't available yet as disabled chips */}
+            {activeSpecialSavings.filter(s => !availableSpecialSavingsOptions.find(o => o.displayName === s)).map(s => (
               <button
-                key={s}
-                className={`kext-special-pill${activeSpecialSavings.includes(s) ? ' kext-special-pill--active' : ''}`}
+                key={`unavail-${s}`}
+                type="button"
+                className="kext-special-pill kext-special-pill--active"
                 onClick={() => handleSpecialSavingsToggle(s)}
+                style={{ opacity: 0.6, borderStyle: 'dashed' }}
+                title="This special savings is preselected but not currently available. It will be applied if it becomes available. Click to remove."
               >
                 {s}
               </button>
@@ -1262,8 +1403,26 @@ export function CouponCustomPage() {
           </>
         ) : (
           <>
-            <div style={{ color: '#718096', fontSize: 13, marginBottom: 12 }}>
-              {totalCount > 0 ? `${totalCount} coupons` : `${coupons.length} coupons`}
+            <div className="kext-coupon-count" style={{ color: '#718096', fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <span>{totalCount > 0 ? `${totalCount} coupons` : `${coupons.length} coupons`}</span>
+                {excludedBrands.length > 0 && excludedCount > 0 && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: '#eef2ff', color: '#4338ca', fontSize: 12 }}>i</span>
+                  </span>
+                )}
+              </span>
+
+              {/* Popover shown on hover */}
+              {excludedBrands.length > 0 && excludedCount > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 6,
+                  fontSize: 12, color: '#111'
+                }} className="kext-excluded-popover">
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>{excludedCount} coupon(s) hidden</div>
+                  <div style={{ color: '#444' }}>These coupons were filtered out by your excluded brands and will remain hidden as more pages load until they no longer match the exclusion.</div>
+                </div>
+              )}
             </div>
             <div style={{
               display: 'grid',
@@ -1294,7 +1453,7 @@ export function CouponCustomPage() {
                     setLoadError(false);
                     const nextOffset = offset + PAGE_SIZE;
                     setOffset(nextOffset);
-                    loadCoupons(activeCategories, sortBy, onlyNewCoupons, nextOffset, true, searchText, activeStatuses);
+                    loadCoupons(activeCategories, sortBy, onlyNewCoupons, nextOffset, true, searchText, activeStatuses, activeModalities, activeSpecialSavings);
                   }}
                   style={{
                     padding: '6px 20px', backgroundColor: 'var(--kext-blue)', color: '#fff',

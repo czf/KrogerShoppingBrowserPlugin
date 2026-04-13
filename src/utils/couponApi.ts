@@ -1,4 +1,5 @@
 import { buildLafHeaders } from './laf';
+import { inPageFetch } from './inPageFetch';
 
 export interface KrogerCoupon {
   id: string;
@@ -36,6 +37,7 @@ export interface FetchCouponsResult {
   totalCount: number;
   newCouponsCount: number;
   categoryOptions: { id: string; name: string }[];
+  specialSavingsOptions?: { name: string; displayName: string }[];
   categoriesDropped: boolean;
 }
 
@@ -45,12 +47,20 @@ export async function fetchCoupons({
   pageSize = 24,
   searchString,
   statuses,
+  sort,
+  onlyNew,
+  modalities,
+  specialSavings,
 }: {
   categories?: string[];
   offset?: number;
   pageSize?: number;
   searchString?: string;
   statuses?: string[];
+  sort?: string;
+  onlyNew?: boolean;
+  modalities?: string[];
+  specialSavings?: string[];
 } = {}): Promise<FetchCouponsResult> {
   const params = new URLSearchParams();
   params.append('projections', 'coupons.compact');
@@ -62,9 +72,20 @@ export async function fetchCoupons({
   }
   params.append('page.size', String(pageSize));
   params.append('page.offset', String(offset));
-  // filter.sort and filter.onlyNewCoupons cause 400; omit both and handle client-side
+  if (onlyNew) {
+    params.append('filter.onlyNewCoupons', 'true');
+  }
+  if (sort) {
+    params.append('filter.sort', sort);
+  }
   for (const cat of categories) {
     params.append('filter.category', cat);
+  }
+  if (modalities && modalities.length > 0) {
+    for (const m of modalities) params.append('filter.modality', m);
+  }
+  if (specialSavings && specialSavings.length > 0) {
+    for (const s of specialSavings) params.append('filter.specialSavings', s);
   }
   if (searchString) {
     params.append('filter.searchString', searchString);
@@ -89,21 +110,29 @@ export async function fetchCoupons({
       const coupons = json?.data?.coupons ?? [];
       const page = json?.meta?.coupons?.page;
       const filterSummary = json?.meta?.coupons?.filterSummaryByType;
+      const specialSavingsOptions = filterSummary ? (filterSummary as any).specialSavings?.options : undefined;
       return {
         coupons,
         hasMore: page?.hasMore ?? (coupons.length === pageSize),
         totalCount: filterSummary?.totalCount ?? coupons.length,
         newCouponsCount: filterSummary?.newCouponsCount ?? 0,
         categoryOptions: filterSummary?.categories?.options ?? [],
+        specialSavingsOptions,
         categoriesDropped: dropped,
       };
     };
 
-    const doFetch = async (p: URLSearchParams) => fetch(`/atlas/v1/savings-coupons/v1/coupons?${p}`, {
+    const doFetch = async (p: URLSearchParams) => inPageFetch(`/atlas/v1/savings-coupons/v1/coupons?${p}`, {
+      method: 'GET',
       headers: await buildLafHeaders(),
       credentials: 'include',
     });
     let res = await doFetch(params);
+    // Debug: log response status and a small sample of the payload for diagnosis
+    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) {
+      try { console.debug('[couponApi] fetchCoupons response', { status: res.status, ok: res.ok }); } catch {}
+      try { res.clone().json().then(j => console.debug('[couponApi] fetchCoupons payload-sample', { couponsLength: j?.data?.coupons?.length ?? 0 })); } catch {}
+    }
     // Retry once on transient 400 (e.g. LAF headers not yet available)
     if (res.status === 400) {
       await new Promise(r => setTimeout(r, 1500));
@@ -136,10 +165,10 @@ export async function fetchCoupons({
 
 export async function clipCoupon(couponId: string, action: 'CLIP' | 'UNCLIP'): Promise<boolean> {
   try {
-    const res = await fetch('/atlas/v1/savings-coupons/v1/clip-unclip', {
+    const res = await inPageFetch('/atlas/v1/savings-coupons/v1/clip-unclip', {
       method: 'POST',
       headers: {
-        ...await buildLafHeaders(),
+        ...(await buildLafHeaders()),
         'content-type': 'application/json',
       },
       credentials: 'include',
@@ -158,7 +187,8 @@ export async function fetchCouponFull(krogerCouponNumber: string): Promise<strin
       'filter.type': 'standard',
       projections: 'coupons.full',
     });
-    const res = await fetch(`/atlas/v1/savings-coupons/v1/coupons?${params}`, {
+    const res = await inPageFetch(`/atlas/v1/savings-coupons/v1/coupons?${params}`, {
+      method: 'GET',
       headers: await buildLafHeaders(),
       credentials: 'include',
     });
@@ -204,7 +234,8 @@ export async function fetchProductsByUpcs(upcs: string[]): Promise<KrogerProduct
       params.append('filter.gtin13s', upc);
     }
     try {
-      const res = await fetch(`/atlas/v1/product/v2/products?${params}`, {
+      const res = await inPageFetch(`/atlas/v1/product/v2/products?${params}`, {
+        method: 'GET',
         headers: await buildLafHeaders(),
         credentials: 'include',
       });
