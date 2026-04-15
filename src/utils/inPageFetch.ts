@@ -1,7 +1,7 @@
 const REQ_EVT = '__kroger_ext_request__';
 const RES_EVT = '__kroger_ext_response__';
 
-export interface InPageFetchResult<T = any> {
+export interface InPageFetchResult<T = unknown> {
   ok: boolean;
   status: number;
   data: T | null;
@@ -20,7 +20,7 @@ function headersToRecord(h?: HeadersInit): Record<string, string> {
   } else if (Array.isArray(h)) {
     for (const [k, v] of h) out[k.toLowerCase()] = String(v);
   } else {
-    for (const [k, v] of Object.entries(h)) out[k.toLowerCase()] = String(v as any);
+    for (const [k, v] of Object.entries(h)) out[k.toLowerCase()] = String(v);
   }
   return out;
 }
@@ -30,11 +30,11 @@ export async function inPageFetch(input: RequestInfo | URL, init?: RequestInit, 
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET'))?.toUpperCase() ?? 'GET';
   const headers = headersToRecord(init?.headers ?? (input instanceof Request ? input.headers : undefined));
 
-  let body: any = init?.body;
+  let body: unknown = init?.body;
   if (!body && input instanceof Request) {
     try {
       body = await input.clone().text();
-    } catch { /* ignore */ }
+    } catch (err) { if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.debug('[inPageFetch] failed to read request body', err); }
   }
 
   const requestId = makeRequestId();
@@ -43,7 +43,7 @@ export async function inPageFetch(input: RequestInfo | URL, init?: RequestInit, 
     const onResponse = (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
       // Debug: log responses coming from the page world
-      if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[inPageFetch] onResponse', { requestId: detail.requestId, status: detail.status }); } catch {}
+      if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[inPageFetch] onResponse', { requestId: detail.requestId, status: detail.status }); } catch (err) { console.error('[inPageFetch] onResponse debug error', err); }
       if (detail.requestId !== requestId) return;
       window.removeEventListener(RES_EVT, onResponse as EventListener);
 
@@ -61,9 +61,10 @@ export async function inPageFetch(input: RequestInfo | URL, init?: RequestInit, 
       } else {
         try {
           bodyInit = JSON.stringify(data);
-        } catch {
+        } catch (err) {
           bodyInit = String(data);
           contentType = 'text/plain;charset=UTF-8';
+          if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.debug('[inPageFetch] JSON.stringify failed', err);
         }
       }
 
@@ -84,7 +85,7 @@ export async function inPageFetch(input: RequestInfo | URL, init?: RequestInit, 
     window.addEventListener(RES_EVT, onResponse as EventListener);
 
     // Dispatch the request to the main world
-    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[inPageFetch] dispatch', { requestId, url, method, headers }); } catch {}
+    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[inPageFetch] dispatch', { requestId, url, method, headers }); } catch (err) { console.error('[inPageFetch] dispatch debug error', err); }
     window.dispatchEvent(new CustomEvent(REQ_EVT, {
       detail: {
         requestId,
@@ -101,7 +102,7 @@ export async function inPageFetch(input: RequestInfo | URL, init?: RequestInit, 
     // Timeout fallback
     setTimeout(() => {
       window.removeEventListener(RES_EVT, onResponse as EventListener);
-      if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[inPageFetch] timeout', { requestId }); } catch {}
+      if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[inPageFetch] timeout', { requestId }); } catch (err) { console.error('[inPageFetch] timeout debug error', err); }
       resolve(Response.error());
     }, timeoutMs);
   });

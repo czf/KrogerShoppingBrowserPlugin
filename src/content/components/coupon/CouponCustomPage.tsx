@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { getCouponFilters, setCouponFilters } from '../../../utils/storage';
 import * as couponApi from '../../../utils/couponApi';
@@ -719,7 +719,9 @@ export function CouponCustomPage() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const initialized = useRef(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [specialSavingsNameMap, setSpecialSavingsNameMap] = useState<Record<string, string>>({});
+  const [specialSavingsNameMap, _setSpecialSavingsNameMap] = useState<Record<string, string>>({});
+  const specialSavingsNameMapRef = useRef<Record<string, string>>(specialSavingsNameMap);
+  const setSpecialSavingsNameMap = (map: Record<string, string>) => { specialSavingsNameMapRef.current = map; _setSpecialSavingsNameMap(map); };
   const [availableSpecialSavingsOptions, setAvailableSpecialSavingsOptions] = useState<{ name: string; displayName: string }[]>([]);
   const unmappedSpecialsRef = useRef<Set<string>>(new Set());
 
@@ -735,7 +737,7 @@ export function CouponCustomPage() {
     };
   }, []);
 
-  async function loadCoupons(cats: string[], sort: string, newOnly: boolean, off: number, append = false, searchString?: string, statuses?: string[], modalities?: string[], specialSavings?: string[]) {
+  const loadCoupons = useCallback(async function loadCoupons(cats: string[], sort: string, newOnly: boolean, off: number, append = false, searchString?: string, statuses?: string[], modalities?: string[], specialSavings?: string[]) {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
     if (append) {
@@ -749,21 +751,21 @@ export function CouponCustomPage() {
       const modalitiesParam = modalities ?? activeModalities;
       const specialSavingsParam = specialSavings ?? activeSpecialSavings;
       // Determine which specials need mapping and which we've already determined are unmapped
-      const toMap = specialSavingsParam.filter(s => !specialSavingsNameMap[s] && !unmappedSpecialsRef.current.has(s));
-      let result = null as unknown as ReturnType<typeof couponApi.fetchCoupons> extends Promise<infer R> ? R : any;
+      const toMap = specialSavingsParam.filter(s => !specialSavingsNameMapRef.current[s] && !unmappedSpecialsRef.current.has(s));
+      let result = null as unknown as Awaited<ReturnType<typeof couponApi.fetchCoupons>>;
 
       if (toMap.length > 0) {
         // initial fetch without specialSavings to obtain mapping in meta
         result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses, sort, onlyNew: newOnly, modalities: modalitiesParam, specialSavings: [] });
-        try { console.debug('[CouponCustomPage] loadCoupons (prefetch) result', { offset: off, append, resultLen: result.coupons.length, hasMore: result.hasMore, totalCount: result.totalCount }); } catch {}
+        if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[CouponCustomPage] loadCoupons (prefetch) result', { offset: off, append, resultLen: result.coupons.length, hasMore: result.hasMore, totalCount: result.totalCount }); } catch (err) { console.error('[CouponCustomPage] debug failed', err); }
         // populate mapping from meta.specialSavingsOptions
-        let map = { ...specialSavingsNameMap };
+        const map = { ...specialSavingsNameMapRef.current };
         try {
           for (const opt of result.specialSavingsOptions ?? []) {
             if (opt.displayName && opt.name && !map[opt.displayName]) map[opt.displayName] = opt.name;
           }
           setSpecialSavingsNameMap(map);
-        } catch (e) {}
+        } catch (e) { if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[CouponCustomPage] populate specialSavingsNameMap failed', e); }
         // remap specials now using the freshly populated local map
         const mappedNow = specialSavingsParam.map(s => map[s] ?? null).filter(Boolean) as string[];
         // mark unmapped items to avoid repeat prefetches
@@ -775,30 +777,30 @@ export function CouponCustomPage() {
         }
       } else {
         // Either all are mapped already or we've seen they are unmapped; use existing mappings only
-        const sendSpecials = specialSavingsParam.map(s => specialSavingsNameMap[s]).filter(Boolean) as string[];
+        const sendSpecials = specialSavingsParam.map(s => specialSavingsNameMapRef.current[s]).filter(Boolean) as string[];
         result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses, sort, onlyNew: newOnly, modalities: modalitiesParam, specialSavings: sendSpecials });
       }
 
-      try { console.debug('[CouponCustomPage] loadCoupons result', { offset: off, append, resultLen: result.coupons.length, hasMore: result.hasMore, totalCount: result.totalCount }); } catch {}
-      let couponsPage = result.coupons;
+      if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[CouponCustomPage] loadCoupons result', { offset: off, append, resultLen: result.coupons.length, hasMore: result.hasMore, totalCount: result.totalCount }); } catch (err) { console.error('[CouponCustomPage] debug failed', err); }
+      const couponsPage = result.coupons;
 
       // Populate specialSavingsNameMap from meta.specialSavingsOptions when available
       try {
-        const map = { ...specialSavingsNameMap };
+        const map = { ...specialSavingsNameMapRef.current };
         for (const opt of result.specialSavingsOptions ?? []) {
           if (opt.displayName && opt.name && !map[opt.displayName]) map[opt.displayName] = opt.name;
         }
         setSpecialSavingsNameMap(map);
-      } catch (e) {}
+      } catch (e) { if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[CouponCustomPage] populate specialSavingsNameMap failed', e); }
 
 
       if (append) {
         setCoupons(prev => {
-          try { console.debug('[CouponCustomPage] appending coupons', { prevLen: prev.length, newLen: couponsPage.length }); } catch {}
+          if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[CouponCustomPage] appending coupons', { prevLen: prev.length, newLen: couponsPage.length }); } catch (err) { console.error('[CouponCustomPage] debug failed', err); }
           return [...prev, ...couponsPage];
         });
       } else {
-        try { console.debug('[CouponCustomPage] setting coupons', { newLen: couponsPage.length }); } catch {}
+        if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[CouponCustomPage] setting coupons', { newLen: couponsPage.length }); } catch (err) { console.error('[CouponCustomPage] debug failed', err); }
         setCoupons(couponsPage);
       }
       // Respect server-provided pagination flag; do not disable pagination for client-side filters
@@ -814,7 +816,7 @@ export function CouponCustomPage() {
           // Drop any active categories that are no longer available (e.g. stale persisted values)
           if (result.categoriesDropped) {
             setActiveCategories([]);
-            persistFilters([], activeModalities, activeSpecialSavings, newOnly, sort);
+            setCouponFilters(buildStoredFilters({ categories: [], modalities: activeModalities, specialSavings: activeSpecialSavings, excludedBrands: excludedBrands, newOnly, sortBy: sort }));
           } else {
             const validValues = new Set(dynCats.map(c => c.value));
             setActiveCategories(prev => prev.filter(c => validValues.has(c)));
@@ -826,17 +828,15 @@ export function CouponCustomPage() {
           setAvailableSpecialSavingsOptions(result.specialSavingsOptions.map(o => ({ displayName: o.displayName, name: o.name })));
           // populate name map too
           try {
-            const map = { ...specialSavingsNameMap };
+            const map = { ...specialSavingsNameMapRef.current };
             for (const opt of result.specialSavingsOptions) {
               if (opt.displayName && opt.name && !map[opt.displayName]) map[opt.displayName] = opt.name;
             }
             setSpecialSavingsNameMap(map);
-          } catch (e) {}
+          } catch (e) { if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[CouponCustomPage] populate specialSavingsNameMap failed', e); }
         }
       }
-    } catch {
-      setLoadError(true);
-    } finally {
+    } catch (err) { if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[CouponCustomPage] loadCoupons failed', err); setLoadError(true); } finally {
       setLoading(false);
       setLoadingMore(false);
       fetchingRef.current = false;
@@ -845,7 +845,10 @@ export function CouponCustomPage() {
         setTimeout(() => checkAndLoadMoreRef.current?.(), 50);
       }
     }
-  }
+  }, [activeModalities, activeSpecialSavings, excludedBrands]);
+
+  const loadCouponsRef = useRef<typeof loadCoupons | null>(null);
+  useEffect(() => { loadCouponsRef.current = loadCoupons; }, [loadCoupons]);
 
   function persistFilters(cats: string[], mods: string[], specials: string[], newOnly: boolean, sort: string, excluded: string[] = excludedBrands) {
     setCouponFilters(buildStoredFilters({ categories: cats, modalities: mods, specialSavings: specials, excludedBrands: excluded, newOnly, sortBy: sort }));
@@ -864,7 +867,8 @@ export function CouponCustomPage() {
       setExcludedBrands(excluded);
       initialized.current = true;
       // pass parsed modalities/specials explicitly to avoid relying on state being updated synchronously
-      loadCoupons(cats, sort, newOnly, 0, false, searchText, activeStatuses, mods, specials);
+      // Avoid referencing component state values (searchText/activeStatuses) here to keep this effect stable
+      loadCouponsRef.current?.(cats, sort, newOnly, 0, false, undefined, undefined, mods, specials);
     });
     return () => { cancelled = true; };
   }, []);
@@ -893,7 +897,7 @@ export function CouponCustomPage() {
     const newMods = activeModalities.includes(value)
       ? activeModalities.filter(m => m !== value)
       : [...activeModalities, value];
-    console.debug('[CouponCustomPage] modality toggle', { value, newMods });
+    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.debug('[CouponCustomPage] modality toggle', { value, newMods });
     setActiveModalities(newMods);
     persistFilters(activeCategories, newMods, activeSpecialSavings, onlyNewCoupons, sortBy);
     // Treat modality as a server-side filter: reload from server
@@ -908,7 +912,7 @@ export function CouponCustomPage() {
     setActiveSpecialSavings(newSpecials);
     persistFilters(activeCategories, activeModalities, newSpecials, onlyNewCoupons, sortBy);
     // If we don't yet have mapping for any of the newly selected specials, fetch a page without specialSavings to populate the map, then re-apply
-    const unmapped = newSpecials.filter(s => !specialSavingsNameMap[s]);
+    const unmapped = newSpecials.filter(s => !specialSavingsNameMapRef.current[s]);
     setOffset(0);
     if (unmapped.length > 0) {
       // fetch to populate specialSavingsNameMap (will not apply the specials)
@@ -1065,7 +1069,7 @@ export function CouponCustomPage() {
   const excludedCount = Math.max(0, coupons.length - displayedCoupons.length);
 
   useEffect(() => {
-    try { console.debug('[CouponCustomPage] state sizes', { couponsLen: coupons.length, displayedLen: displayedCoupons.length, excludedCount, hasMore, offset }); } catch {}
+    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[CouponCustomPage] state sizes', { couponsLen: coupons.length, displayedLen: displayedCoupons.length, excludedCount, hasMore, offset }); } catch (err) { console.error('[CouponCustomPage] debug failed', err); }
   }, [coupons, displayedCoupons, excludedCount, hasMore, offset]);
 
 

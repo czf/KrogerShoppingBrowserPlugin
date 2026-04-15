@@ -19,7 +19,20 @@ import { fetchCoupons } from '../../../utils/couponApi';
 import { getCouponFilters } from '../../../utils/storage';
 import { CouponCustomPage } from './CouponCustomPage';
 
-function makeCoupon(id: string, title: string, brand: string) {
+type FetchResult = Awaited<ReturnType<typeof fetchCoupons>>;
+type FetchArgs = Parameters<typeof fetchCoupons>[0];
+
+interface TestCoupon {
+  id: string;
+  title: string;
+  brandName: string;
+  merchantName: string;
+  savingsText: string;
+  priceText: string;
+  imageUrl: string;
+}
+
+function makeCoupon(id: string, title: string, brand: string): TestCoupon {
   return {
     id,
     title,
@@ -28,7 +41,7 @@ function makeCoupon(id: string, title: string, brand: string) {
     savingsText: '$1.00',
     priceText: '$3.99',
     imageUrl: '',
-  } as any;
+  };
 }
 
 describe('CouponCustomPage - filters integration', () => {
@@ -54,24 +67,24 @@ describe('CouponCustomPage - filters integration', () => {
       categoryOptions: [],
       specialSavingsOptions: [{ name: 'bonus', displayName: 'Bonus Digital Deals' }],
       categoriesDropped: false,
-    } as any);
+    } as unknown as FetchResult);
 
     render(<CouponCustomPage />);
 
     await waitFor(() => expect(fetchCoupons).toHaveBeenCalled());
 
-    const calls = vi.mocked(fetchCoupons).mock.calls.map((c) => (c[0] || {}) as any);
+    const calls = vi.mocked(fetchCoupons).mock.calls.map((c) => c[0] as FetchArgs | undefined);
 
     // Ensure a call included the modality and onlyNew
-    expect(calls.some((a: any) => Array.isArray(a.modalities) && a.modalities.includes('IN_STORE'))).toBe(true);
-    expect(calls.some((a: any) => a.onlyNew === true)).toBe(true);
+    expect(calls.some((a) => (a?.modalities?.includes('IN_STORE')) ?? false)).toBe(true);
+    expect(calls.some((a) => a?.onlyNew === true)).toBe(true);
 
     // Ensure specialSavings was sent as the internal name 'bonus' (mapped from displayName)
-    expect(calls.some((a: any) => Array.isArray(a.specialSavings) && a.specialSavings.includes('bonus'))).toBe(true);
+    expect(calls.some((a) => (a?.specialSavings?.includes('bonus')) ?? false)).toBe(true);
 
     // Ensure excludedBrands is never sent to the API
     for (const a of calls) {
-      expect(a.excludedBrands).toBeUndefined();
+      expect(Object.prototype.hasOwnProperty.call(a as object, 'excludedBrands')).toBe(false);
     }
 
     // UI should not display the excluded brand coupon (client-side exclusion)
@@ -93,16 +106,16 @@ describe('CouponCustomPage - filters integration', () => {
       categoryOptions: [],
       specialSavingsOptions: [],
       categoriesDropped: false,
-    } as any);
+    } as unknown as FetchResult);
 
     render(<CouponCustomPage />);
 
     await waitFor(() => expect(fetchCoupons).toHaveBeenCalled());
 
-    const calls = vi.mocked(fetchCoupons).mock.calls.map((c) => (c[0] || {}) as any);
+    const calls = vi.mocked(fetchCoupons).mock.calls.map((c) => c[0] as FetchArgs | undefined);
 
     // No call should include a non-empty specialSavings array (because mapping wasn't available)
-    expect(calls.every((a: any) => !Array.isArray(a.specialSavings) || a.specialSavings.length === 0)).toBe(true);
+    expect(calls.every((a) => !(a?.specialSavings && a.specialSavings.length > 0))).toBe(true);
 
     // The UI should show the preselected special pill (dashed or preselected state) - at least the label should be present
     // The component renders the special savings chips by their display names; ensure the preselected text is present

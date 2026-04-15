@@ -122,11 +122,25 @@ window.fetch = async function (
 
 // ─── Fetch-on-behalf requests from ISOLATED world ─────────────────────────
 
+interface RequestEventDetail {
+  requestId?: string;
+  action?: string;
+  request?: {
+    url?: string;
+    method?: string;
+    headers?: Record<string, string>;
+    credentials?: string;
+    body?: unknown;
+  };
+  upc?: string;
+  upcs?: string[];
+}
+
 window.addEventListener(EVT.REQUEST, async (e: Event) => {
-  const detail = (e as CustomEvent<any>).detail;
+  const detail = (e as CustomEvent<RequestEventDetail>).detail;
   const requestId = detail?.requestId;
-  const action = detail?.action;
-  const request = detail?.request;
+  const action = detail?.action as string | undefined;
+  const request = detail?.request as RequestEventDetail['request'] | undefined;
 
   const respond = (payload: { ok: boolean; status: number; data?: unknown; error?: string | null }) =>
     window.dispatchEvent(new CustomEvent(EVT.API_RESPONSE, { detail: { requestId, ...payload } }));
@@ -169,10 +183,11 @@ window.addEventListener(EVT.REQUEST, async (e: Event) => {
       return;
     }
 
-    const method = (request.method ?? 'GET').toUpperCase();
-    const headers = { ...(request.headers ?? {}), accept: 'application/json, text/plain, */*', ...capturedHeaders };
-    const fetchOpts: RequestInit = { method, headers, credentials: request.credentials ?? 'include' };
-    if (request.body !== undefined && request.body !== null) fetchOpts.body = request.body;
+    const method = (request?.method ?? 'GET').toUpperCase();
+    const headers = { ...(request?.headers ?? {}), accept: 'application/json, text/plain, */*', ...capturedHeaders };
+    const credentials = (request?.credentials as RequestCredentials | undefined) ?? 'include';
+    const fetchOpts: RequestInit = { method, headers, credentials };
+    if (request && request.body !== undefined && request.body !== null) fetchOpts.body = request.body as BodyInit;
 
     try {
       const res = await originalFetch(request.url, fetchOpts);

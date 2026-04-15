@@ -101,6 +101,7 @@ export async function fetchCoupons({
             totalCount?: number;
             newCouponsCount?: number;
             categories?: { options?: { id: string; name: string }[] };
+            specialSavings?: { options?: { name: string; displayName: string }[] };
           };
         };
       };
@@ -110,7 +111,7 @@ export async function fetchCoupons({
       const coupons = json?.data?.coupons ?? [];
       const page = json?.meta?.coupons?.page;
       const filterSummary = json?.meta?.coupons?.filterSummaryByType;
-      const specialSavingsOptions = filterSummary ? (filterSummary as any).specialSavings?.options : undefined;
+      const specialSavingsOptions = filterSummary?.specialSavings?.options;
       return {
         coupons,
         hasMore: page?.hasMore ?? (coupons.length === pageSize),
@@ -130,8 +131,8 @@ export async function fetchCoupons({
     let res = await doFetch(params);
     // Debug: log response status and a small sample of the payload for diagnosis
     if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) {
-      try { console.debug('[couponApi] fetchCoupons response', { status: res.status, ok: res.ok }); } catch {}
-      try { res.clone().json().then(j => console.debug('[couponApi] fetchCoupons payload-sample', { couponsLength: j?.data?.coupons?.length ?? 0 })); } catch {}
+      try { console.debug('[couponApi] fetchCoupons response', { status: res.status, ok: res.ok }); } catch (err) { console.error('[couponApi] fetchCoupons response debug error', err); }
+      try { res.clone().json().then(j => console.debug('[couponApi] fetchCoupons payload-sample', { couponsLength: j?.data?.coupons?.length ?? 0 })); } catch (err) { console.error('[couponApi] fetchCoupons payload-sample debug error', err); }
     }
     // Retry once on transient 400 (e.g. LAF headers not yet available)
     if (res.status === 400) {
@@ -158,7 +159,8 @@ export async function fetchCoupons({
     }
     if (!res.ok) return EMPTY;
     return parseResponse(await res.json() as CouponsJson);
-  } catch {
+  } catch (err) {
+    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[couponApi] fetchCoupons failed', err);
     return { coupons: [], hasMore: false, totalCount: 0, newCouponsCount: 0, categoryOptions: [], categoriesDropped: false };
   }
 }
@@ -175,7 +177,8 @@ export async function clipCoupon(couponId: string, action: 'CLIP' | 'UNCLIP'): P
       body: JSON.stringify({ action, couponId }),
     });
     return res.ok;
-  } catch {
+  } catch (err) {
+    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[couponApi] clipCoupon failed', err);
     return false;
   }
 }
@@ -195,7 +198,8 @@ export async function fetchCouponFull(krogerCouponNumber: string): Promise<strin
     if (!res.ok) return [];
     const json = await res.json() as { data?: { coupons?: Array<{ upcs?: string[] }> } };
     return json?.data?.coupons?.[0]?.upcs ?? [];
-  } catch {
+  } catch (err) {
+    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[couponApi] fetchCouponFull failed', err);
     return [];
   }
 }
@@ -264,7 +268,8 @@ export async function fetchProductsByUpcs(upcs: string[]): Promise<KrogerProduct
           shareLink: product.item?.shareLink ?? '',
         };
       });
-    } catch {
+    } catch (err) {
+      if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[couponApi] fetchProductsByUpcs batch failed', err);
       return [] as KrogerProductCompact[];
     }
   }));

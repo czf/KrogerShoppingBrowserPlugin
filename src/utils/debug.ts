@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 export const dbg: (...args: unknown[]) => void = __KROGER_DEBUG__
   ? (...args) => console.log('[KrogerExt]', ...args)
   : () => {};
