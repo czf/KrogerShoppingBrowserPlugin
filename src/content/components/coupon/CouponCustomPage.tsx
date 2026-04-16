@@ -721,7 +721,7 @@ export function CouponCustomPage() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [specialSavingsNameMap, _setSpecialSavingsNameMap] = useState<Record<string, string>>({});
   const specialSavingsNameMapRef = useRef<Record<string, string>>(specialSavingsNameMap);
-  const setSpecialSavingsNameMap = (map: Record<string, string>) => { specialSavingsNameMapRef.current = map; _setSpecialSavingsNameMap(map); };
+  const setSpecialSavingsNameMap = useCallback((map: Record<string, string>) => { specialSavingsNameMapRef.current = map; _setSpecialSavingsNameMap(map); }, []);
   const [availableSpecialSavingsOptions, setAvailableSpecialSavingsOptions] = useState<{ name: string; displayName: string }[]>([]);
   const unmappedSpecialsRef = useRef<Set<string>>(new Set());
 
@@ -845,7 +845,7 @@ export function CouponCustomPage() {
         setTimeout(() => checkAndLoadMoreRef.current?.(), 50);
       }
     }
-  }, [activeModalities, activeSpecialSavings, excludedBrands]);
+  }, [activeModalities, activeSpecialSavings, excludedBrands, setSpecialSavingsNameMap]);
 
   const loadCouponsRef = useRef<typeof loadCoupons | null>(null);
   useEffect(() => { loadCouponsRef.current = loadCoupons; }, [loadCoupons]);
@@ -974,20 +974,52 @@ export function CouponCustomPage() {
   }
 
   // Keep checkAndLoadMoreRef always pointing to the latest load-next-page logic
+  // Use refs to hold latest values so this effect can be run once without needing many deps
+  const hasMoreRef = useRef(hasMore);
+  const loadErrorRef = useRef(loadError);
+  const offsetRef = useRef(offset);
+  const activeCategoriesRef = useRef(activeCategories);
+  const sortByRef = useRef(sortBy);
+  const onlyNewRef = useRef(onlyNewCoupons);
+  const activeStatusesRef = useRef(activeStatuses);
+  const activeModalitiesRef = useRef(activeModalities);
+  const activeSpecialSavingsRef = useRef(activeSpecialSavings);
+
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+    loadErrorRef.current = loadError;
+    offsetRef.current = offset;
+    activeCategoriesRef.current = activeCategories;
+    sortByRef.current = sortBy;
+    onlyNewRef.current = onlyNewCoupons;
+    activeStatusesRef.current = activeStatuses;
+    activeModalitiesRef.current = activeModalities;
+    activeSpecialSavingsRef.current = activeSpecialSavings;
+  }, [hasMore, loadError, offset, activeCategories, sortBy, onlyNewCoupons, activeStatuses, activeModalities, activeSpecialSavings]);
+
   useEffect(() => {
     checkAndLoadMoreRef.current = () => {
-      if (fetchingRef.current || !hasMore || loadError) return;
+      if (fetchingRef.current || !hasMoreRef.current || loadErrorRef.current) return;
       const sentinel = sentinelRef.current;
       if (!sentinel) return;
       const rect = sentinel.getBoundingClientRect();
       if (rect.top < window.innerHeight + 200 && rect.bottom >= 0) {
-        const nextOffset = offset + PAGE_SIZE;
+        const nextOffset = offsetRef.current + PAGE_SIZE;
         setOffset(nextOffset);
-        loadCoupons(activeCategories, sortBy, onlyNewCoupons, nextOffset, true, undefined, activeStatuses, activeModalities, activeSpecialSavings);
+        loadCouponsRef.current?.(
+          activeCategoriesRef.current,
+          sortByRef.current,
+          onlyNewRef.current,
+          nextOffset,
+          true,
+          undefined,
+          activeStatusesRef.current,
+          activeModalitiesRef.current,
+          activeSpecialSavingsRef.current,
+        );
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMore, loadError, offset, activeCategories, sortBy, onlyNewCoupons]);
+  }, []);
 
   // Stable scroll listener — never disconnects; calls the always-fresh checkAndLoadMoreRef
   useEffect(() => {
