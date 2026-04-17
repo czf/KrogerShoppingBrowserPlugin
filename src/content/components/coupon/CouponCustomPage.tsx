@@ -4,6 +4,7 @@ import { getCouponFilters, setCouponFilters } from '../../../utils/storage';
 import * as couponApi from '../../../utils/couponApi';
 import type { KrogerCoupon, KrogerProductCompact } from '../../../utils/couponApi';
 import { formatExpiry, parseStoredFilters, buildStoredFilters } from '../../../utils/couponUtils';
+import { dbg, dbgWarn } from '../../../utils/debug';
 
 const PAGE_SIZE = 24;
 
@@ -757,7 +758,7 @@ export function CouponCustomPage() {
       if (toMap.length > 0) {
         // initial fetch without specialSavings to obtain mapping in meta
         result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses, sort, onlyNew: newOnly, modalities: modalitiesParam, specialSavings: [] });
-        if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[CouponCustomPage] loadCoupons (prefetch) result', { offset: off, append, resultLen: result.coupons.length, hasMore: result.hasMore, totalCount: result.totalCount }); } catch (err) { console.error('[CouponCustomPage] debug failed', err); }
+        try { dbg('[CouponCustomPage] loadCoupons (prefetch) result', { offset: off, append, resultLen: result.coupons.length, hasMore: result.hasMore, totalCount: result.totalCount }); } catch (err) { dbgWarn('[CouponCustomPage] debug failed', err); }
         // populate mapping from meta.specialSavingsOptions
         const map = { ...specialSavingsNameMapRef.current };
         try {
@@ -765,7 +766,7 @@ export function CouponCustomPage() {
             if (opt.displayName && opt.name && !map[opt.displayName]) map[opt.displayName] = opt.name;
           }
           setSpecialSavingsNameMap(map);
-        } catch (e) { if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[CouponCustomPage] populate specialSavingsNameMap failed', e); }
+        } catch (e) { dbgWarn('[CouponCustomPage] populate specialSavingsNameMap failed', e); }
         // remap specials now using the freshly populated local map
         const mappedNow = specialSavingsParam.map(s => map[s] ?? null).filter(Boolean) as string[];
         // mark unmapped items to avoid repeat prefetches
@@ -781,7 +782,7 @@ export function CouponCustomPage() {
         result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses, sort, onlyNew: newOnly, modalities: modalitiesParam, specialSavings: sendSpecials });
       }
 
-      if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[CouponCustomPage] loadCoupons result', { offset: off, append, resultLen: result.coupons.length, hasMore: result.hasMore, totalCount: result.totalCount }); } catch (err) { console.error('[CouponCustomPage] debug failed', err); }
+      try { dbg('[CouponCustomPage] loadCoupons result', { offset: off, append, resultLen: result.coupons.length, hasMore: result.hasMore, totalCount: result.totalCount }); } catch (err) { dbgWarn('[CouponCustomPage] debug failed', err); }
       const couponsPage = result.coupons;
 
       // Populate specialSavingsNameMap from meta.specialSavingsOptions when available
@@ -791,16 +792,16 @@ export function CouponCustomPage() {
           if (opt.displayName && opt.name && !map[opt.displayName]) map[opt.displayName] = opt.name;
         }
         setSpecialSavingsNameMap(map);
-      } catch (e) { if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[CouponCustomPage] populate specialSavingsNameMap failed', e); }
+      } catch (e) { dbgWarn('[CouponCustomPage] populate specialSavingsNameMap failed', e); }
 
 
       if (append) {
         setCoupons(prev => {
-          if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[CouponCustomPage] appending coupons', { prevLen: prev.length, newLen: couponsPage.length }); } catch (err) { console.error('[CouponCustomPage] debug failed', err); }
+          try { dbg('[CouponCustomPage] appending coupons', { prevLen: prev.length, newLen: couponsPage.length }); } catch (err) { dbgWarn('[CouponCustomPage] debug failed', err); }
           return [...prev, ...couponsPage];
         });
       } else {
-        if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[CouponCustomPage] setting coupons', { newLen: couponsPage.length }); } catch (err) { console.error('[CouponCustomPage] debug failed', err); }
+        try { dbg('[CouponCustomPage] setting coupons', { newLen: couponsPage.length }); } catch (err) { dbgWarn('[CouponCustomPage] debug failed', err); }
         setCoupons(couponsPage);
       }
       // Respect server-provided pagination flag; do not disable pagination for client-side filters
@@ -833,10 +834,10 @@ export function CouponCustomPage() {
               if (opt.displayName && opt.name && !map[opt.displayName]) map[opt.displayName] = opt.name;
             }
             setSpecialSavingsNameMap(map);
-          } catch (e) { if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[CouponCustomPage] populate specialSavingsNameMap failed', e); }
+          } catch (e) { dbgWarn('[CouponCustomPage] populate specialSavingsNameMap failed', e); }
         }
       }
-    } catch (err) { if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.error('[CouponCustomPage] loadCoupons failed', err); setLoadError(true); } finally {
+    } catch (err) { dbgWarn('[CouponCustomPage] loadCoupons failed', err); setLoadError(true); } finally {
       setLoading(false);
       setLoadingMore(false);
       fetchingRef.current = false;
@@ -897,7 +898,7 @@ export function CouponCustomPage() {
     const newMods = activeModalities.includes(value)
       ? activeModalities.filter(m => m !== value)
       : [...activeModalities, value];
-    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.debug('[CouponCustomPage] modality toggle', { value, newMods });
+    try { dbg('[CouponCustomPage] modality toggle', { value, newMods }); } catch (err) { dbgWarn('[CouponCustomPage] modality toggle debug failed', err); }
     setActiveModalities(newMods);
     persistFilters(activeCategories, newMods, activeSpecialSavings, onlyNewCoupons, sortBy);
     // Treat modality as a server-side filter: reload from server
@@ -1101,7 +1102,7 @@ export function CouponCustomPage() {
   const excludedCount = Math.max(0, coupons.length - displayedCoupons.length);
 
   useEffect(() => {
-    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[CouponCustomPage] state sizes', { couponsLen: coupons.length, displayedLen: displayedCoupons.length, excludedCount, hasMore, offset }); } catch (err) { console.error('[CouponCustomPage] debug failed', err); }
+    try { dbg('[CouponCustomPage] state sizes', { couponsLen: coupons.length, displayedLen: displayedCoupons.length, excludedCount, hasMore, offset }); } catch (err) { dbgWarn('[CouponCustomPage] debug failed', err); }
   }, [coupons, displayedCoupons, excludedCount, hasMore, offset]);
 
 

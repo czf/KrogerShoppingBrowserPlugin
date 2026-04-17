@@ -1,3 +1,5 @@
+import { dbg, dbgWarn } from './debug';
+
 const REQ_EVT = '__kroger_ext_request__';
 const RES_EVT = '__kroger_ext_response__';
 
@@ -34,7 +36,7 @@ export async function inPageFetch(input: RequestInfo | URL, init?: RequestInit, 
   if (!body && input instanceof Request) {
     try {
       body = await input.clone().text();
-    } catch (err) { if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.debug('[inPageFetch] failed to read request body', err); }
+    } catch (err) { dbgWarn('[inPageFetch] failed to read request body', err); }
   }
 
   const requestId = makeRequestId();
@@ -43,7 +45,7 @@ export async function inPageFetch(input: RequestInfo | URL, init?: RequestInit, 
     const onResponse = (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
       // Debug: log responses coming from the page world
-      if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[inPageFetch] onResponse', { requestId: detail.requestId, status: detail.status }); } catch (err) { console.error('[inPageFetch] onResponse debug error', err); }
+      try { dbg('[inPageFetch] onResponse', { requestId: detail.requestId, status: detail.status }); } catch (err) { dbgWarn('[inPageFetch] onResponse debug error', err); }
       if (detail.requestId !== requestId) return;
       window.removeEventListener(RES_EVT, onResponse as EventListener);
 
@@ -64,7 +66,7 @@ export async function inPageFetch(input: RequestInfo | URL, init?: RequestInit, 
         } catch (err) {
           bodyInit = String(data);
           contentType = 'text/plain;charset=UTF-8';
-          if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) console.debug('[inPageFetch] JSON.stringify failed', err);
+          dbgWarn('[inPageFetch] JSON.stringify failed', err);
         }
       }
 
@@ -85,7 +87,7 @@ export async function inPageFetch(input: RequestInfo | URL, init?: RequestInit, 
     window.addEventListener(RES_EVT, onResponse as EventListener);
 
     // Dispatch the request to the main world
-    if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[inPageFetch] dispatch', { requestId, url, method, headers }); } catch (err) { console.error('[inPageFetch] dispatch debug error', err); }
+    try { dbg('[inPageFetch] dispatch', { requestId, url, method, headers }); } catch (err) { dbgWarn('[inPageFetch] dispatch debug error', err); }
     window.dispatchEvent(new CustomEvent(REQ_EVT, {
       detail: {
         requestId,
@@ -102,7 +104,7 @@ export async function inPageFetch(input: RequestInfo | URL, init?: RequestInit, 
     // Timeout fallback
     setTimeout(() => {
       window.removeEventListener(RES_EVT, onResponse as EventListener);
-      if (typeof __KROGER_DEBUG__ !== 'undefined' && __KROGER_DEBUG__) try { console.debug('[inPageFetch] timeout', { requestId }); } catch (err) { console.error('[inPageFetch] timeout debug error', err); }
+      try { dbg('[inPageFetch] timeout', { requestId }); } catch (err) { dbgWarn('[inPageFetch] timeout debug error', err); }
       resolve(Response.error());
     }, timeoutMs);
   });

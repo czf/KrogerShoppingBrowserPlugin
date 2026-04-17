@@ -8,6 +8,8 @@
  *     replicate the exact headers the page uses)
  */
 
+import { dbg } from '../utils/debug';
+
 const EVT = {
   HEADERS_CAPTURED: '__kroger_ext_headers__',
   API_DATA: '__kroger_ext_data__',
@@ -75,7 +77,7 @@ window.fetch = async function (
   // Capture headers from this outgoing request
   const req = input instanceof Request ? input : undefined;
   if (captureHeaders(init, req)) {
-    if (__KROGER_DEBUG__) console.log('[KrogerExt] Headers captured:', { ...capturedHeaders });
+    dbg('[KrogerExt] Headers captured:', { ...capturedHeaders });
     window.dispatchEvent(
       new CustomEvent(EVT.HEADERS_CAPTURED, { detail: { ...capturedHeaders } }),
     );
@@ -113,7 +115,7 @@ window.fetch = async function (
 
   // Notify ISOLATED world when modality/store changes
   if (url.includes('/modality/preferences') && (init?.method ?? 'GET').toUpperCase() === 'POST' && response.ok) {
-    if (__KROGER_DEBUG__) console.log('[KrogerExt] Modality change detected, dispatching cache-clear event');
+    dbg('[KrogerExt] Modality change detected, dispatching cache-clear event');
     window.dispatchEvent(new CustomEvent(EVT.MODALITY_CHANGED));
   }
 
@@ -201,7 +203,7 @@ window.addEventListener(EVT.REQUEST, async (e: Event) => {
 
       // Notify ISOLATED world when modality/store changes
       if (request.url.includes('/modality/preferences') && method === 'POST' && res.ok) {
-        if (__KROGER_DEBUG__) console.log('[KrogerExt] Modality change detected, dispatching cache-clear event');
+        dbg('[KrogerExt] Modality change detected, dispatching cache-clear event');
         window.dispatchEvent(new CustomEvent(EVT.MODALITY_CHANGED));
       }
 
