@@ -51,20 +51,20 @@ describe('CouponCustomPage — specialSavings mapping/race', () => {
     const initial = {
       coupons: [], hasMore: false, totalCount: 0, newCouponsCount: 0,
       categoryOptions: [], specialSavingsOptions: [], categoriesDropped: false,
-    } as any;
+    } as Awaited<ReturnType<typeof fetchCoupons>>;
 
     const withMapping = {
       coupons: [], hasMore: false, totalCount: 0, newCouponsCount: 0,
       categoryOptions: [], specialSavingsOptions: [{ name: 'bonus', displayName: 'Bonus Digital Deals' }], categoriesDropped: false,
-    } as any;
+    } as Awaited<ReturnType<typeof fetchCoupons>>;
 
     const mappedApplied = {
       coupons: [makeCoupon('m1', 'Mapped Coupon')], hasMore: false, totalCount: 1, newCouponsCount: 0,
       categoryOptions: [], specialSavingsOptions: [{ name: 'bonus', displayName: 'Bonus Digital Deals' }], categoriesDropped: false,
-    } as any;
+    } as Awaited<ReturnType<typeof fetchCoupons>>;
 
     let call = 0;
-    vi.mocked(fetchCoupons).mockImplementation(async (_args: any = {}) => {
+    vi.mocked(fetchCoupons).mockImplementation(async () => {
       call += 1;
       if (call === 1) return initial; // initial mount
       if (call === 2) return withMapping; // prefetch triggered by toggle (populates mapping)
