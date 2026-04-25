@@ -776,8 +776,6 @@ export function CouponCustomPage() {
         if (mappedNow.length > 0) {
           result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses, sort, onlyNew: newOnly, modalities: modalitiesParam, specialSavings: mappedNow });
         }
-      } else {
-        // Either all are mapped already or we've seen they are unmapped; use existing mappings only
         const sendSpecials = specialSavingsParam.map(s => specialSavingsNameMapRef.current[s]).filter(Boolean) as string[];
         result = await couponApi.fetchCoupons({ categories: cats, offset: off, pageSize: PAGE_SIZE, searchString, statuses, sort, onlyNew: newOnly, modalities: modalitiesParam, specialSavings: sendSpecials });
       }
