@@ -1,4 +1,5 @@
 import { dbg, dbgWarn } from './debug';
+import { inPageFetch } from './inPageFetch';
 
 interface LafEntry {
   modality: {
@@ -45,7 +46,7 @@ export async function resolveLaf(): Promise<LafData> {
   if (cached && !isCacheStale()) return cached;
 
   try {
-    const res = await fetch('/atlas/v1/modality/preferences?filter.restrictLafToFc=false', {
+    const res = await inPageFetch('/atlas/v1/modality/preferences?filter.restrictLafToFc=false', {
       method: 'POST',
       headers: { accept: 'application/json, text/plain, */*', 'x-kroger-channel': 'WEB' },
       credentials: 'include',
